@@ -1,5 +1,5 @@
-Sinatra Tips and Tricks: Part One
-=================================
+Sinatra Best Practices: Part One
+================================
 
 While Sinatra’s one-file approach may work well for your one-off, smaller
 application - it can quickly become a mess as you add on multiple routes,
@@ -52,20 +52,23 @@ end
 
 get '/secrets' do
   require_logged_in
-  # show some top secret stuff
+  erb :secrets
 end
 
 ```
 
-Subclassing Sinatra::Base and Namespacing Your App
---------------------------------------------------
+Use Sinatra's "Modular" Style
+-----------------------------
 
 According to the [Sinatra docs][sinatra-extensions]: “When a classic style
 application is run, all Sinatra::Application public class methods are exported
 to the top-level." Also, using the classical style prevents you from running
-more than [one Sinatra application per Rubyprocess][sinatra-modular-vs-classic].
-If these things concern you (like they do me), you’ll need to re-organize
-you’ll app into what Sinatra calls the “modular” style, like so:
+more than
+[one Sinatra application per Ruby process][sinatra-modular-vs-classic] - all
+calls to these top-level methods are handled by Sinatra::Application,
+functioning as a singleton. We can avoid these potentially-confusing scoping
+problems by reorganizing our application into what Sinatra calls the "modular"
+style, like so:
 
 ```ruby
 
@@ -103,8 +106,9 @@ class SimpleApp < Sinatra::Base
 
   get '/secrets' do
     require_logged_in
-    # show some secret stuff
+    erb :secrets
   end
+
 end
 
 ```
@@ -124,8 +128,8 @@ run SimpleApp
 
 ```
 
-Reducing Duplication By Using Lambdas
--------------------------------------
+Reduce Duplication via Lambdas
+------------------------------
 
 One thing you may find yourself wanting to do is bind multiple routes to the
 same handler. While there’s nothing keeping you from factoring this shared code
@@ -167,7 +171,7 @@ class SimpleApp < Sinatra::Base
 
   show_secrets = lambda do
     require_logged_in
-    # show some secret stuff
+    erb :secrets
   end
 
   get  '/', &show_login
@@ -179,8 +183,8 @@ end
 
 ```
 
-Splitting Into Multiple Files
------------------------------
+Break Your Code Into Multiple Files
+-----------------------------------
 
 As your application grows larger (in line count) you’ll most likely want some
 way of grouping together pieces of like-functionality into separate files which
@@ -209,6 +213,7 @@ class SimpleApp < Sinatra::Base
 
   register Sinatra::SampleApp::Routing::Sessions
   register Sinatra::SampleApp::Routing::Secrets
+
 end
 
 
@@ -219,6 +224,7 @@ end
 module Sinatra
   module SampleApp
     module Helpers
+
       def require_logged_in
         redirect('/sessions/new') unless is_authenticated?
       end
@@ -226,6 +232,7 @@ module Sinatra
       def is_authenticated?
         return !!session[:user_id]
       end
+
     end
   end
 end
@@ -239,14 +246,16 @@ module Sinatra
   module SampleApp
     module Routing
       module Secrets
+
         def self.registered(app)
           show_secrets = lambda do
             require_logged_in
-            # show some secret stuff
+            erb :secrets
           end
 
           app.get  '/secrets', &show_secrets
         end
+
       end
     end
   end
@@ -261,6 +270,7 @@ module Sinatra
   module SampleApp
     module Routing
       module Sessions
+
         def self.registered(app)
           show_login = lambda do
             erb :login
@@ -275,6 +285,7 @@ module Sinatra
           app.get  '/sessions/new', &show_login
           app.post '/sessions', &receive_login
         end
+
       end
     end
   end
