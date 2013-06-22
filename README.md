@@ -25,6 +25,10 @@ focus on code-style and organization.
 
 require 'sinatra'
 
+set :root, File.dirname(__FILE__)
+
+enable :sessions
+
 def require_logged_in
   redirect('/sessions/new') unless is_authenticated?
 end
@@ -42,7 +46,7 @@ get '/sessions/new' do
 end
 
 post '/sessions' do
-  session[:user_id] = params[:user_id]
+  session[:user_id] = params["user_id"]
   redirect('/secrets')
 end
 
@@ -71,15 +75,20 @@ you’ll app into what Sinatra calls the “modular” style, like so:
 
 require 'sinatra/base'
 
-def require_logged_in
-  redirect('/sessions/new') unless is_authenticated?
-end
-
-def is_authenticated?
-  return !!session[:user_id]
-end
-
 class SimpleApp < Sinatra::Base
+
+  set :root, File.dirname(__FILE__)
+
+  enable :sessions
+
+  def require_logged_in
+    redirect('/sessions/new') unless is_authenticated?
+  end
+
+  def is_authenticated?
+    return !!session[:user_id]
+  end
+
   get '/' do
     erb :login
   end
@@ -89,7 +98,7 @@ class SimpleApp < Sinatra::Base
   end
 
   post '/sessions' do
-    session[:user_id] = params[:user_id]
+    session[:user_id] = params["user_id"]
   end
 
   get '/secrets' do
@@ -133,22 +142,26 @@ and share the handlers across routes with ease.
 
 require 'sinatra/base'
 
-def require_logged_in
-  redirect('/sessions/new') unless is_authenticated?
-end
-
-def is_authenticated?
-  return !!session[:user_id]
-end
-
 class SimpleApp < Sinatra::Base
+
+  set :root, File.dirname(__FILE__)
+
+  enable :sessions
+
+  def require_logged_in
+    redirect('/sessions/new') unless is_authenticated?
+  end
+
+  def is_authenticated?
+    return !!session[:user_id]
+  end
 
   show_login = lambda do
     erb :login
   end
 
   receive_login = lambda do
-    session[:user_id] = params[:user_id]
+    session[:user_id] = params["user_id"]
     redirect '/secrets'
   end
 
@@ -187,7 +200,13 @@ require_relative 'routes/secrets'
 require_relative 'routes/sessions'
 
 class SimpleApp < Sinatra::Base
+
+  set :root, File.dirname(__FILE__)
+
+  enable :sessions
+
   helpers Sinatra::SampleApp::Helpers
+
   register Sinatra::SampleApp::Routing::Sessions
   register Sinatra::SampleApp::Routing::Secrets
 end
@@ -248,7 +267,7 @@ module Sinatra
           end
 
           receive_login = lambda do
-            session[:user_id] = params[:user_id]
+            session[:user_id] = params["user_id"]
             redirect '/secrets'
           end
 
