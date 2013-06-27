@@ -1,4 +1,4 @@
-sinatra-best-practices
-======================
+simple-sinatra-tips-tricks
+==========================
 
-A small whose purpose is to demonstrate Sintra best practices
+Some examples of simple ways to clean up your Sinatra-based application
