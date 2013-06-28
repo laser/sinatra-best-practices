@@ -1,310 +1,104 @@
-Sinatra Best Practices: Part One
+Sinatra Best Practices: Part Two
 ================================
 
-While Sinatra’s one-file approach may work well for your one-off, smaller
-application - it can quickly become a mess as you add on multiple routes,
-route-handlers, helpers, and configuration. So what’s a programmer to do?
+In [part one][part-one] we saw how to break up your Sinatra application into
+smaller bite-size pieces. Today, we're going to explore testing, which will also
+compel us to address environment configuration.
 
-In reading Sinatra’s documentation I’ve found a few morsels that have enabled
-us to split our otherwise-monolithic (I realize this term is becoming a cliché,
-but given the single-file nature of Sinatra-based web-applications I feel like
-it’s appropriate) applications into smaller, more manageable pieces.
-
-The "Classical" Sinatra Application - Our Baseline
---------------------------------------------------
-
-We’ll start with something paired down for simplicity’s sake. I’ll leave it as
-an exercise to the reader to determine what this application does and instead
-focus on code-style and organization.
+To get started, we need to add rspec and rack-test to our gem file:
 
 ```ruby
+# Gemfile
+source 'https://rubygems.org'
 
-########
-# app.rb
-#
+gem 'sinatra'
 
-require 'sinatra'
-
-set :root, File.dirname(__FILE__)
-
-enable :sessions
-
-def require_logged_in
-  redirect('/sessions/new') unless is_authenticated?
+group :test, :development do
+  gem 'rspec'
 end
 
-def is_authenticated?
-  return !!session[:user_id]
+group :test do
+  gem 'rack-test'
 end
-
-get '/' do
-  erb :login
-end
-
-get '/sessions/new' do
-  erb :login
-end
-
-post '/sessions' do
-  session[:user_id] = params["user_id"]
-  redirect('/secrets')
-end
-
-get '/secrets' do
-  require_logged_in
-  erb :secrets
-end
-
 ```
 
-Use Sinatra's "Modular" Style
------------------------------
-
-According to the [Sinatra docs][sinatra-extensions]: “When a classic style
-application is run, all Sinatra::Application public class methods are exported
-to the top-level." Also, using the classical style prevents you from running
-more than
-[one Sinatra application per Ruby process][sinatra-modular-vs-classic] - all
-calls to these top-level methods are handled by Sinatra::Application,
-functioning as a singleton. We can avoid these potentially-confusing scoping
-problems by reorganizing our application into what Sinatra calls the "modular"
-style, like so:
+Now we can leverage different environments to load only the gems we need.
+We don't really want RSpec loaded in production, after all, do we?
 
 ```ruby
-
-########
 # app.rb
-#
+ENV['RACK_ENV'] ||= 'development'
 
-require 'sinatra/base'
-
-class SimpleApp < Sinatra::Base
-
-  set :root, File.dirname(__FILE__)
-
-  enable :sessions
-
-  def require_logged_in
-    redirect('/sessions/new') unless is_authenticated?
-  end
-
-  def is_authenticated?
-    return !!session[:user_id]
-  end
-
-  get '/' do
-    erb :login
-  end
-
-  get '/sessions/new' do
-    erb :login
-  end
-
-  post '/sessions' do
-    session[:user_id] = params["user_id"]
-  end
-
-  get '/secrets' do
-    require_logged_in
-    erb :secrets
-  end
-
-end
-
-```
-
-This app will need to be started with rackup via a config file (I called it
-“config.ru”) that looks something like:
-
-```ruby
-
-###########
-# config.ru
-#
-
-require File.dirname(__FILE__) + '/app'
-
-run SimpleApp
-
-```
-
-Reduce Duplication via Lambdas
-------------------------------
-
-One thing you may find yourself wanting to do is bind multiple routes to the
-same handler. While there’s nothing keeping you from factoring this shared code
-into a method invoked in each route-handler’s block - it would be nice if we
-had some clean, concise way to remove the duplicate blocks entirely. Using
-lambdas passed as blocks, you can visually separate routes from their handlers
-and share the handlers across routes with ease.
-
-```ruby
-
-########
-# app.rb
-#
-
-require 'sinatra/base'
-
-class SimpleApp < Sinatra::Base
-
-  set :root, File.dirname(__FILE__)
-
-  enable :sessions
-
-  def require_logged_in
-    redirect('/sessions/new') unless is_authenticated?
-  end
-
-  def is_authenticated?
-    return !!session[:user_id]
-  end
-
-  show_login = lambda do
-    erb :login
-  end
-
-  receive_login = lambda do
-    session[:user_id] = params["user_id"]
-    redirect '/secrets'
-  end
-
-  show_secrets = lambda do
-    require_logged_in
-    erb :secrets
-  end
-
-  get  '/', &show_login
-  get  '/sessions/new', &show_login
-  post '/sessions', &receive_login
-  get  '/secrets', &show_secrets
-
-end
-
-```
-
-Break Your Code Into Multiple Files
------------------------------------
-
-As your application grows larger (in line count) you’ll most likely want some
-way of grouping together pieces of like-functionality into separate files which
-are then required by your main Sinatra-application’s file. This can be achieved
-using the “helpers” and “register” methods, like so:
-
-```ruby
-
-########
-# app.rb
-#
-
-require 'sinatra/base'
+require 'bundler'
+Bundler.require :default, ENV['RACK_ENV'].to_sym
 
 require_relative 'helpers'
 require_relative 'routes/secrets'
 require_relative 'routes/sessions'
 
 class SimpleApp < Sinatra::Base
-
-  set :root, File.dirname(__FILE__)
-
-  enable :sessions
-
-  helpers Sinatra::SampleApp::Helpers
-
-  register Sinatra::SampleApp::Routing::Sessions
-  register Sinatra::SampleApp::Routing::Secrets
-
+  # No changes here - left out for brevity.
 end
-
-
-############
-# helpers.rb
-#
-
-module Sinatra
-  module SampleApp
-    module Helpers
-
-      def require_logged_in
-        redirect('/sessions/new') unless is_authenticated?
-      end
-
-      def is_authenticated?
-        return !!session[:user_id]
-      end
-
-    end
-  end
-end
-
-
-###################
-# routes/secrets.rb
-#
-
-module Sinatra
-  module SampleApp
-    module Routing
-      module Secrets
-
-        def self.registered(app)
-          show_secrets = lambda do
-            require_logged_in
-            erb :secrets
-          end
-
-          app.get  '/secrets', &show_secrets
-        end
-
-      end
-    end
-  end
-end
-
-
-####################
-# routes/sessions.rb
-#
-
-module Sinatra
-  module SampleApp
-    module Routing
-      module Sessions
-
-        def self.registered(app)
-          show_login = lambda do
-            erb :login
-          end
-
-          receive_login = lambda do
-            session[:user_id] = params["user_id"]
-            redirect '/secrets'
-          end
-
-          app.get  '/', &show_login
-          app.get  '/sessions/new', &show_login
-          app.post '/sessions', &receive_login
-        end
-
-      end
-    end
-  end
-end
-
 ```
 
-Takeaway
---------
+The first line sets the environment to development by default. After that, we
+use Bundler to load only the gems for the appropriate environment.
 
-These are just a few tips and tricks that you can use in your next
-Sinatra-based project. We'll keep posting as we learn new ways to simplify and
-organize our code - so stay tuned!
+We're pretty big believers in having the default rake task run your full test
+suite, so to that end, our rakefile looks something like this:
 
-In the mean time, I encourage you to review the [Sinatra
-documentation][sinatra-docs] and the excellent [Sinatra
-Explained][sinatra-explained] project by Zheng Jia.
+```ruby
+# rakefile
+require 'rspec/core/rake_task'
 
-[sinatra-docs]: http://www.sinatrarb.com/documentation.html
-[sinatra-explained]: https://github.com/zhengjia/sinatra-explained
-[sinatra-extensions]: http://www.sinatrarb.com/extensions.html
-[sinatra-modular-vs-classic]: http://www.sinatrarb.com/intro.html#Modular%20vs.%20Classic%20Style
+RSpec::Core::RakeTask.new :specs do |task|
+  task.pattern = Dir['spec/**/*_spec.rb']
+end
+
+task :default => ['specs']
+```
+
+Now, a simple `bundle exec rake` will run our full test suite, which will yield
+0 tests run at this point, so let's fix that by adding some. We'll start with
+the spec_helper, which is not a requirement, per se, but makes things
+quite clean when we get to constructing tests, as we'll see in just a moment.
+
+```ruby
+# spec/spec_helper.rb
+ENV['RACK_ENV'] = 'test'
+
+require_relative File.join('..', 'app')
+
+RSpec.configure do |config|
+  include Rack::Test::Methods
+
+  def app
+    SimpleApp
+  end
+end
+```
+
+In our spec helper, we force the environment to be test and then load the app,
+which will load the appropriate gems via bundler.
+
+So let's add a spec:
+
+```ruby
+# spec/features/root_spec.rb
+require_relative '../spec_helper'
+
+describe 'Root Path' do
+  describe 'GET /' do
+    before { get '/' }
+
+    it 'is successful' do
+      expect(last_response.status).to eq 200
+    end
+  end
+end
+```
+
+And there we have it. Our Sinatra app is loading only the gems necessary for
+the environment and our testing infrastructure is in place.
+
+[part-one]: http://blog.carbonfive.com/2013/06/24/sinatra-best-practices-part-one/
